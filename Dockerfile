@@ -1,19 +1,52 @@
 # transmission container
-# VERSION               0.0.4
-FROM angelrr7702/ubuntu-13.10-sshd
-MAINTAINER Angel Rodriguez  "angelrr7702@gmail.com"
-RUN echo "deb http://archive.ubuntu.com/ubuntu saucy-backports main restricted universe" >> /etc/apt/sources.list
+# VERSION               0.0.1
+FROM tianon/debian:jessie
+
+MAINTAINER Jonathan Dray <jonathan.dray+docker@gmail.com>
+
+# We are in a non interactive environment so
+# we tell apt to not ask for packages configuration options
 ENV DEBIAN_FRONTEND noninteractive
-ENV USER_T guest
-ENV PASSWD_T guest
-RUN (apt-get update && apt-get upgrade -y -q && apt-get dist-upgrade -y -q && apt-get -y -q autoclean && apt-get -y -q autoremove)
-RUN apt-get install -y -q transmission-daemon supervisor
-ADD settings.json /var/lib/transmission-daemon/info/settings.json
-ADD foreground.sh /etc/transmission-daemon/foreground.sh
+
+
+# Debian update package information
+# Set environment variables
+RUN sed -i 's/ftp.us/ftp.fr/g' /etc/apt/sources.list
+ADD resources/etc/apt/apt.conf.d/01norecommends /etc/apt/apt.conf.d/01norecommends
+RUN apt-get update -y -q
+
+
+# System locales configuration
+RUN apt-get install -y --no-install-recommends locales
+RUN echo "fr_FR.UTF-8 UTF-8" >> /etc/locale.gen && locale-gen
+ENV LANG fr_FR.UTF-8
+
+
+# Install transmission
+RUN apt-get install -y -q transmission-daemon
+
+
+# Copy configuration
+# Transmission configuration
+ADD resources/etc/transmission-daemon /etc/transmission-daemon
+# Set up a startup script
 RUN chmod 755 /etc/transmission-daemon/foreground.sh
-ADD start.sh /start.sh
-RUN chmod 755 /start.sh
-RUN mkdir -p /var/log/supervisor
-ADD supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-EXPOSE 9091 22
-CMD ["/bin/bash", "-e", "/start.sh"]
+
+
+# Setup required directories
+RUN mkdir -p /srv/download /srv/incomplete /srv/watch
+RUN chown debian-transmission /srv/download /srv/incomplete /srv/watch
+
+
+# Install supervisord
+# # Usefull to start and monitor multiple processes (easier than systemd in a docker context)
+RUN apt-get install -y -q supervisor
+ADD resources/etc/supervisor/ /etc/supervisor/
+
+
+# Expose transmission webinterface 9091 port
+EXPOSE 9091
+
+
+# Container startup script (need to be changed to supervisord)
+CMD ["/usr/bin/supervisord"]
